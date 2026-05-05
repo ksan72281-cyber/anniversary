@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Anniversary</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;1,300&family=Cinzel:wght@300;400&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Cormorant Garamond',serif;cursor:none}
+#cursor{position:fixed;width:10px;height:10px;border-radius:50%;background:#c9a96e;pointer-events:none;z-index:9999;transform:translate(-50%,-50%);box-shadow:0 0 14px #c9a96e;transition:width .2s,height .2s,background .2s}
+#cursor.big{width:24px;height:24px;background:transparent;border:1.5px solid #c9a96e}
+#canvas{position:fixed;inset:0;width:100%;height:100%;z-index:0}
+#anti-date{position:fixed;top:28px;left:32px;font-family:'Cinzel',serif;font-size:11px;letter-spacing:5px;color:rgba(255,255,255,0.38);z-index:20;text-transform:uppercase}
+#scene{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;z-index:2;perspective:900px}
+#scene-inner{position:relative;width:100%;height:100%;transform-style:preserve-3d;transition:transform .1s ease-out;display:flex;align-items:center;justify-content:center}
+#center-text{position:absolute;text-align:center;pointer-events:none;z-index:3}
+#center-text h1{font-family:'Cinzel',serif;font-size:clamp(20px,4.5vw,54px);font-weight:300;letter-spacing:10px;color:#fff;text-shadow:0 0 50px rgba(201,169,110,.5),0 0 100px rgba(180,100,255,.2)}
+#center-text p{margin-top:10px;font-size:clamp(10px,1.4vw,14px);letter-spacing:6px;color:rgba(255,255,255,0.38);font-style:italic;text-transform:uppercase}
+#orbit{position:absolute;width:0;height:0;transform-style:preserve-3d}
+.photo-item{position:absolute;width:120px;height:120px;border-radius:50%;overflow:hidden;cursor:pointer;border:1.5px solid rgba(201,169,110,.25);transition:border-color .3s,box-shadow .3s;will-change:transform}
+.photo-item:hover{border-color:#c9a96e;box-shadow:0 0 30px rgba(201,169,110,.45)}
+.photo-item img{width:100%;height:100%;object-fit:cover;border-radius:50%;display:block;filter:brightness(.85) saturate(.9);transition:filter .3s}
+.photo-item:hover img{filter:brightness(1) saturate(1.1)}
+#caption{position:fixed;background:rgba(0,0,0,.82);border:1px solid rgba(201,169,110,.3);color:#e8d5b0;padding:10px 18px;border-radius:6px;font-size:13px;letter-spacing:2px;pointer-events:none;opacity:0;transition:opacity .3s;z-index:100;font-style:italic;white-space:nowrap;backdrop-filter:blur(6px)}
+#caption.show{opacity:1}
+/* sand particles canvas behind everything but above black hole */
+#sand-canvas{position:fixed;inset:0;width:100%;height:100%;z-index:1;pointer-events:none}
+</style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+<canvas id="sand-canvas"></canvas>
+
+<div id="anti-date">1 / 3 / 2009</div>
+
+<div id="scene">
+  <div id="scene-inner">
+    <div id="center-text">
+      <h1>Anniversary</h1>
+      <p>forever &amp; always</p>
+    </div>
+    <div id="orbit"></div>
+  </div>
+</div>
+
+<div id="caption"></div>
+<div id="cursor"></div>
+
+<script>
+// ── canvas setup ──
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const sandCanvas = document.getElementById('sand-canvas');
+const sctx = sandCanvas.getContext('2d');
+
+function resize(){
+  canvas.width = sandCanvas.width = window.innerWidth;
+  canvas.height = sandCanvas.height = window.innerHeight;
+}
+resize();
+window.addEventListener('resize', resize);
+
+const W = () => canvas.width;
+const H = () => canvas.height;
+
+// ── stars ──
+const stars = Array.from({length:250},()=>({
+  x: Math.random(),
+  y: Math.random(),
+  r: Math.random()*1.4+.2,
+  a: Math.random(),
+  spd: Math.random()*.007+.002
+}));
+
+// ── black hole particles (accretion disk) ──
+const diskParticles = Array.from({length:80},()=>({
+  angle: Math.random()*Math.PI*2,
+  dist: Math.random()*70+35,
+  size: Math.random()*2+.4,
+  speed: (Math.random()*.015+.005)*(Math.random()>.5?1:-1),
+  alpha: Math.random()*.7+.2,
+  hue: Math.random()*60+260
+}));
+
+// ── sand particles ──
+const sandParts = Array.from({length:90},()=>({
+  x: Math.random(),
+  y: .75+Math.random()*.25,
+  vx: (Math.random()-.5)*.0008,
+  vy: -Math.random()*.0004-.0001,
+  size: Math.random()*2+.5,
+  alpha: Math.random()*.5+.1,
+  life: Math.random()
+}));
+
+function drawScene(){
+  ctx.clearRect(0,0,W(),H());
+
+  // stars
+  stars.forEach(s=>{
+    s.a += s.spd*(Math.random()>.5?1:-1);
+    s.a = Math.max(.04,Math.min(1,s.a));
+    ctx.beginPath();
+    ctx.arc(s.x*W(), s.y*H(), s.r, 0, Math.PI*2);
+    ctx.fillStyle = `rgba(255,255,255,${s.a})`;
+    ctx.fill();
+  });
+
+  const cx=W()/2, cy=H()/2;
+
+  // outer glow
+  const outerGlow = ctx.createRadialGradient(cx,cy,60,cx,cy,280);
+  outerGlow.addColorStop(0,'rgba(80,0,120,.0)');
+  outerGlow.addColorStop(.5,'rgba(60,0,100,.12)');
+  outerGlow.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.fillStyle = outerGlow;
+  ctx.fillRect(0,0,W(),H());
+
+  // accretion rings
+  const t = Date.now()*.001;
+  for(let i=0;i<3;i++){
+    const rx = 140+i*22, ry = 26+i*7;
+    ctx.save();
+    ctx.translate(cx,cy);
+    ctx.rotate(t*.25+i*.6);
+    ctx.scale(1, ry/rx);
+    const rg = ctx.createRadialGradient(0,0,rx-14,0,0,rx+14);
+    rg.addColorStop(0,'rgba(0,0,0,0)');
+    rg.addColorStop(.45,`rgba(${170-i*25},${60-i*15},${220-i*20},${.2-i*.04})`);
+    rg.addColorStop(1,'rgba(0,0,0,0)');
+    ctx.beginPath();
+    ctx.arc(0,0,rx,0,Math.PI*2);
+    ctx.strokeStyle = rg;
+    ctx.lineWidth = 24;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // disk particles
+  diskParticles.forEach(p=>{
+    p.angle += p.speed;
+    const px = cx + Math.cos(p.angle)*p.dist;
+    const py = cy + Math.sin(p.angle)*p.dist*.22;
+    ctx.beginPath();
+    ctx.arc(px,py,p.size,0,Math.PI*2);
+    ctx.fillStyle = `hsla(${p.hue},70%,80%,${p.alpha*.8})`;
+    ctx.fill();
+  });
+
+  // black hole core
+  const core = ctx.createRadialGradient(cx,cy,0,cx,cy,110);
+  core.addColorStop(0,'rgba(0,0,0,1)');
+  core.addColorStop(.45,'rgba(5,0,12,.97)');
+  core.addColorStop(.75,'rgba(20,0,35,.6)');
+  core.addColorStop(1,'rgba(0,0,0,0)');
+  ctx.beginPath();
+  ctx.arc(cx,cy,110,0,Math.PI*2);
+  ctx.fillStyle = core;
+  ctx.fill();
+}
+
+function drawSand(){
+  sctx.clearRect(0,0,W(),H());
+  sandParts.forEach(p=>{
+    p.life += .004;
+    if(p.life>1){
+      p.life=0;
+      p.x=Math.random();
+      p.y=.78+Math.random()*.22;
+      p.vx=(Math.random()-.5)*.0008;
+      p.vy=-Math.random()*.0004-.0001;
+      p.alpha=Math.random()*.5+.1;
+    }
+    p.x += p.vx;
+    p.y += p.vy;
+    const fade = p.life<.15 ? p.life/.15 : p.life>.75 ? 1-(p.life-.75)/.25 : 1;
+    sctx.beginPath();
+    sctx.arc(p.x*W(), p.y*H(), p.size, 0, Math.PI*2);
+    sctx.fillStyle = `rgba(201,169,110,${p.alpha*fade*.6})`;
+    sctx.fill();
+  });
+}
+
+function loop(){
+  drawScene();
+  drawSand();
+  requestAnimationFrame(loop);
+}
+loop();
+
+// ── photos ──
+const photos = [
+  { url:'https://picsum.photos/seed/ann1/300/300', caption:'First meeting' },
+  { url:'https://picsum.photos/seed/ann2/300/300', caption:'Our first date' },
+  { url:'https://picsum.photos/seed/ann3/300/300', caption:'That silly moment' },
+  { url:'https://picsum.photos/seed/ann4/300/300', caption:'Always together' },
+  { url:'https://picsum.photos/seed/ann5/300/300', caption:'You & me' },
+  { url:'https://picsum.photos/seed/ann6/300/300', caption:'Pure happiness' },
+];
+
+const orbit = document.getElementById('orbit');
+const captionEl = document.getElementById('caption');
+const items = [];
+
+photos.forEach((ph,i)=>{
+  const div = document.createElement('div');
+  div.className = 'photo-item';
+  const img = document.createElement('img');
+  img.src = ph.url;
+  img.alt = ph.caption;
+  div.appendChild(img);
+  orbit.appendChild(div);
+
+  div.addEventListener('mouseenter',()=>{
+    captionEl.textContent = ph.caption;
+    captionEl.classList.add('show');
+    document.getElementById('cursor').classList.add('big');
+  });
+  div.addEventListener('mouseleave',()=>{
+    captionEl.classList.remove('show');
+    document.getElementById('cursor').classList.remove('big');
+  });
+  div.addEventListener('mousemove',e=>{
+    captionEl.style.left=(e.clientX+18)+'px';
+    captionEl.style.top=(e.clientY-44)+'px';
+  });
+  items.push(div);
+});
+
+// ── orbit animation ──
+let orbitAngle = 0;
+const orbitRadius = () => Math.min(window.innerWidth, window.innerHeight) * .28;
+
+function updateOrbit(){
+  orbitAngle += .005;
+  items.forEach((item,i)=>{
+    const a = (i/items.length)*Math.PI*2 + orbitAngle;
+    const r = orbitRadius();
+    const x = Math.cos(a)*r;
+    const y = Math.sin(a)*r*.36;
+    const z = Math.sin(a)*55;
+    const scale = .68 + .52*((z+55)/110);
+    const ox = -60, oy = -60;
+    item.style.transform = `translate(${x+ox}px,${y+oy}px) scale(${scale})`;
+    item.style.zIndex = Math.round(scale*15);
+    item.style.opacity = .45 + .55*(scale-.68)/.52;
+  });
+  requestAnimationFrame(updateOrbit);
+}
+updateOrbit();
+
+// ── 3D mouse tilt ──
+const sceneInner = document.getElementById('scene-inner');
+let tRX=0,tRY=0,cRX=0,cRY=0;
+
+document.addEventListener('mousemove',e=>{
+  const nx=(e.clientX/window.innerWidth-.5)*2;
+  const ny=(e.clientY/window.innerHeight-.5)*2;
+  tRX = -ny*9;
+  tRY = nx*9;
+  document.getElementById('cursor').style.left=e.clientX+'px';
+  document.getElementById('cursor').style.top=e.clientY+'px';
+});
+
+// touch support
+document.addEventListener('touchmove',e=>{
+  const t=e.touches[0];
+  const nx=(t.clientX/window.innerWidth-.5)*2;
+  const ny=(t.clientY/window.innerHeight-.5)*2;
+  tRX=-ny*9; tRY=nx*9;
+},{passive:true});
+
+function tiltLoop(){
+  cRX += (tRX-cRX)*.07;
+  cRY += (tRY-cRY)*.07;
+  sceneInner.style.transform=`rotateX(${cRX}deg) rotateY(${cRY}deg)`;
+  requestAnimationFrame(tiltLoop);
+}
+tiltLoop();
+</script>
+</body>
+</html>
