@@ -82,7 +82,7 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
     </span>
   </div>
   <div id="caption"></div>
-  <div id="hint">drag to orbit · tap photo to view</div>
+  <div id="hint">drag to orbit · tap photo to rotate</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -230,6 +230,10 @@ const planets = [
   createPlanet(0.048, 0xff9944, 0.52, 0.022),  // Venus
   createPlanet(0.055, 0x3399ff, 0.72, 0.016),  // Earth
   createPlanet(0.042, 0xff4422, 0.92, 0.011),  // Mars
+  createPlanet(0.080, 0xffcc88, 1.18, 0.007),  // Jupiter
+  createPlanet(0.068, 0xffdd99, 1.46, 0.005),  // Saturn
+  createPlanet(0.052, 0x88ddff, 1.72, 0.004),  // Uranus
+  createPlanet(0.050, 0x4466ff, 1.96, 0.003),  // Neptune
 ];
 
 // Ambient + Point light
@@ -354,7 +358,7 @@ photoData.forEach((ph, i) => {
 });
 
 // ══════════════════════════════════════════
-// TAP → CAPTION
+// LONG-PRESS CAROUSEL SYSTEM
 // ══════════════════════════════════════════
 const ray    = new THREE.Raycaster();
 const mpos   = new THREE.Vector2();
@@ -362,63 +366,139 @@ const capEl  = document.getElementById('caption');
 let   capTimer;
 let   didDrag     = false;
 let   isDragging  = false;
-let   pressedMesh = null;   // ဖိထားတဲ့ card
 let   downX = 0, downY = 0;
 let   prevX = 0, prevY = 0;
-const dragThresh  = 5;
-const SCALE_PRESS = 1.22;   // ဖိရင် ကြီးလာမယ့် scale
+const dragThresh  = 8;
+
+// Carousel state
+let frontIndex = 0;
+let isRotating = false;
+let rotateProgress = 0;
+let rotateFrom = [];
+let rotateTo = [];
+
+// Tap state
+let tappedMesh = null;
+let isDraggingFlower = false;
+
+
+// Carousel rotation — ဖိတဲ့ပုံကို ရှေ့ဆုံးသို့ တိုက်ရိုက်ရောက်အောင် rotate
+function startCarouselRotateTo(targetMesh){
+  if(isRotating) return;
+
+  // targetMesh ဟာ meshes[] မှာ ဘယ် index မှာလဲ ရှာ
+  const tappedIdx = meshes.indexOf(targetMesh);
+  if(tappedIdx === -1) return;
+
+  // ယခု frontIndex ရှိတဲ့ mesh ဟာ positions[0] မှာ ရှိတယ်
+  // tappedIdx ဟာ positions မှာ ဘယ်မှာရှိတာ စစ်ဖို့
+  // positions[0] = ရှေ့ဆုံး (center front)
+  // tappedMesh ရဲ့ base position နဲ့ positions[] နှိုင်းယှဉ်
+  const tappedPos = targetMesh.userData.base;
+  let tappedPosIdx = 0;
+  let minDist = Infinity;
+  positions.forEach((p, i) => {
+    const d = tappedPos.distanceTo(p);
+    if(d < minDist){ minDist = d; tappedPosIdx = i; }
+  });
+
+  // ရှေ့ဆုံး (index 0) မှာ ရှိနှင့်ပြီးရင် — caption ပဲပြ၊ rotate မလုပ်
+  if(tappedPosIdx === 0){
+    capEl.textContent = photoData[meshes.indexOf(targetMesh)].caption;
+    capEl.classList.add('show');
+    clearTimeout(capTimer);
+    capTimer = setTimeout(()=> capEl.classList.remove('show'), 2500);
+    return;
+  }
+
+  isRotating = true;
+  rotateProgress = 0;
+
+  // tappedPosIdx ကို 0 သို့ ရောက်အောင် shift လုပ်ရမယ့် ပမာဏ
+  const steps = tappedPosIdx; // ဘယ်နှစ်ဆင့် shift လုပ်ရမလဲ
+
+  rotateFrom = meshes.map(m => m.userData.base.clone());
+  rotateTo = meshes.map((m, i) => {
+    // mesh i ရဲ့ ယခု position index ရှာ
+    const curPos = m.userData.base;
+    let curPosIdx = 0;
+    let md = Infinity;
+    positions.forEach((p, pi) => {
+      const d = curPos.distanceTo(p);
+      if(d < md){ md = d; curPosIdx = pi; }
+    });
+    // steps ဆင့် ရှေ့တက်
+    const newPosIdx = (curPosIdx - steps + N) % N;
+    return positions[newPosIdx].clone();
+  });
+
+  // ဖိတဲ့ပုံ ရှေ့ရောက်ပြီ ဆိုတဲ့ caption ပြ
+  capEl.textContent = photoData[meshes.indexOf(targetMesh)].caption;
+  capEl.classList.add('show');
+  clearTimeout(capTimer);
+  capTimer = setTimeout(()=> capEl.classList.remove('show'), 2500);
+}
 
 // ── pointer down
+let pressStartX = 0, pressStartY = 0;
+
 function onPointerDown(cx, cy){
   downX = cx; downY = cy;
   prevX = cx; prevY = cy;
+  pressStartX = cx; pressStartY = cy;
   didDrag = false;
+  isDraggingFlower = false;
 
   mpos.x =  (cx/innerWidth )*2-1;
   mpos.y = -(cy/innerHeight)*2+1;
   ray.setFromCamera(mpos, camera);
   const hit = ray.intersectObjects(meshes);
-  if(hit.length){
-    isDragging  = true;
-    pressedMesh = hit[0].object;
-    controls.enabled = false;
 
-    // ဖိတဲ့ card ကို ကြီးစေ + caption ချက်ချင်းပြ
-    pressedMesh.scale.setScalar(SCALE_PRESS);
-    const idx = meshes.indexOf(pressedMesh);
-    capEl.textContent = photoData[idx].caption;
-    capEl.classList.add('show');
-    clearTimeout(capTimer);
+  if(hit.length && !isRotating){
+    tappedMesh = hit[0].object;
+    controls.enabled = false;
+  } else {
+    tappedMesh = null;
+    controls.enabled = true;
   }
 }
 
-// ── pointer move — X, Y, Z axis သုံးခုလုံး လှည့်
+// ── pointer move
 function onPointerMove(cx, cy){
-  if(!isDragging) return;
-  const dx = cx - downX, dy = cy - downY;
-  if(Math.sqrt(dx*dx+dy*dy) > dragThresh) didDrag = true;
+  const dx = cx - pressStartX, dy = cy - pressStartY;
+  if(Math.sqrt(dx*dx+dy*dy) > dragThresh){
+    didDrag = true;
+    if(tappedMesh){
+      // drag on photo → rotate flowerGroup relative to camera orientation
+      isDraggingFlower = true;
+      const deltaX = cx - prevX;
+      const deltaY = cy - prevY;
 
-  const deltaX = cx - prevX;
-  const deltaY = cy - prevY;
+      // camera ရဲ့ up/right direction နဲ့ align ဖြစ်အောင် quaternion သုံး
+      const camRight = new THREE.Vector3();
+      const camUp    = new THREE.Vector3();
+      camera.getWorldDirection(new THREE.Vector3()); // ensure matrix updated
+      camRight.setFromMatrixColumn(camera.matrixWorld, 0); // camera right axis
+      camUp.setFromMatrixColumn(camera.matrixWorld, 1);    // camera up axis
+
+      const qX = new THREE.Quaternion().setFromAxisAngle(camUp,    deltaX * 0.008);
+      const qY = new THREE.Quaternion().setFromAxisAngle(camRight, deltaY * 0.008);
+
+      flowerGroup.quaternion.premultiply(qX).premultiply(qY);
+    }
+  }
   prevX = cx; prevY = cy;
-
-  flowerGroup.rotation.y += deltaX * 0.012;   // ဘယ်ညာ
-  flowerGroup.rotation.x += deltaY * 0.012;   // အပေါ်အောက်
-  flowerGroup.rotation.z += (deltaX * deltaY) * 0.0003; // အနံ (diagonal)
 }
 
 // ── pointer up
 function onPointerUp(cx, cy){
-  if(pressedMesh){
-    // ဖိထားတဲ့ card ပြန်သေး
-    pressedMesh.scale.setScalar(1.0);
-    capTimer = setTimeout(()=> capEl.classList.remove('show'), 1800);
-    pressedMesh = null;
+  if(tappedMesh && !didDrag && !isRotating){
+    startCarouselRotateTo(tappedMesh);
   }
-  if(isDragging){
-    controls.enabled = true;
-    isDragging = false;
-  }
+  tappedMesh = null;
+  isDraggingFlower = false;
+  controls.enabled = true;
+  isDragging = false;
 }
 
 // Mouse
@@ -444,17 +524,38 @@ function animate(){
   requestAnimationFrame(animate);
   const t = performance.now() * .001;
 
-  // flower cards float + face camera + smooth scale
+  // Carousel rotation animation
+  if(isRotating){
+    rotateProgress = Math.min(rotateProgress + 0.018, 1);
+    // easeInOutCubic
+    const ease = rotateProgress < 0.5
+      ? 4 * rotateProgress * rotateProgress * rotateProgress
+      : 1 - Math.pow(-2 * rotateProgress + 2, 3) / 2;
+
+    meshes.forEach((m, i) => {
+      const from = rotateFrom[i];
+      const to   = rotateTo[i];
+      m.userData.base.lerpVectors(from, to, ease);
+    });
+
+    if(rotateProgress >= 1){
+      // Snap final positions
+      meshes.forEach((m, i) => {
+        m.userData.base.copy(rotateTo[i]);
+      });
+      isRotating = false;
+      rotateProgress = 0;
+    }
+  }
+
+  // flower cards float + face camera
   meshes.forEach(m => {
     const d = m.userData;
+    m.position.x = d.base.x;
+    m.position.z = d.base.z;
     m.position.y = d.base.y + Math.sin(t * d.speed + d.phase) * d.amp;
     m.lookAt(camera.position);
-
-    // ဖိထားတဲ့ card ကြီး၊ ကျန်တာ သေး — smooth lerp
-    const targetScale = (m === pressedMesh) ? SCALE_PRESS : 1.0;
-    m.scale.x += (targetScale - m.scale.x) * 0.15;
-    m.scale.y += (targetScale - m.scale.y) * 0.15;
-    m.scale.z += (targetScale - m.scale.z) * 0.15;
+    m.scale.setScalar(1.0);
   });
 
   // 3D hearts float & rotate
