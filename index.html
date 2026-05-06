@@ -73,6 +73,15 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
 </head>
 <body>
 
+<!-- Loading Screen -->
+<div id="loader">
+  <div id="loader-inner">
+    <div id="loader-hearts">♡</div>
+    <div id="loader-text">Loading...</div>
+    <div id="loader-bar-wrap"><div id="loader-bar"></div></div>
+  </div>
+</div>
+
 <div id="ui">
   <div id="date">
     <span class="heart-icon">♡</span>
@@ -82,7 +91,7 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
     </span>
   </div>
   <div id="caption"></div>
-  <div id="hint">drag to orbit · tap photo to rotate</div>
+  <div id="hint">drag to orbit · tap photo to see caption · hold to enlarge</div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -94,7 +103,14 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
 // ══════════════════════════════════════════
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
-camera.position.set(0, 0, 5);
+// ပုံထဲနီးနီးမှာ စ၊ ပြီးရင် zoom out
+camera.position.set(0.5, 0.8, 0.6);
+
+let introActive   = true;
+let introProgress = 0;
+const introDuration = 2.5;
+const introStartPos = new THREE.Vector3(0.5, 0.8, 0.6);
+const introEndPos   = new THREE.Vector3(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(innerWidth, innerHeight);
@@ -381,62 +397,28 @@ let rotateTo = [];
 let tappedMesh = null;
 let isDraggingFlower = false;
 
+// ── Long press / hold state
+let holdTimer = null;
+let holdMesh  = null;
+let isHolding = false;
+const HOLD_MS = 350; // 350ms ဖိမှ hold ဆိုမယ်
 
-// Carousel rotation — ဖိတဲ့ပုံကို ရှေ့ဆုံးသို့ တိုက်ရိုက်ရောက်အောင် rotate
-function startCarouselRotateTo(targetMesh){
-  if(isRotating) return;
-
-  // targetMesh ဟာ meshes[] မှာ ဘယ် index မှာလဲ ရှာ
-  const tappedIdx = meshes.indexOf(targetMesh);
-  if(tappedIdx === -1) return;
-
-  // ယခု frontIndex ရှိတဲ့ mesh ဟာ positions[0] မှာ ရှိတယ်
-  // tappedIdx ဟာ positions မှာ ဘယ်မှာရှိတာ စစ်ဖို့
-  // positions[0] = ရှေ့ဆုံး (center front)
-  // tappedMesh ရဲ့ base position နဲ့ positions[] နှိုင်းယှဉ်
-  const tappedPos = targetMesh.userData.base;
-  let tappedPosIdx = 0;
-  let minDist = Infinity;
-  positions.forEach((p, i) => {
-    const d = tappedPos.distanceTo(p);
-    if(d < minDist){ minDist = d; tappedPosIdx = i; }
-  });
-
-  // ရှေ့ဆုံး (index 0) မှာ ရှိနှင့်ပြီးရင် — caption ပဲပြ၊ rotate မလုပ်
-  if(tappedPosIdx === 0){
-    capEl.textContent = photoData[meshes.indexOf(targetMesh)].caption;
-    capEl.classList.add('show');
-    clearTimeout(capTimer);
-    capTimer = setTimeout(()=> capEl.classList.remove('show'), 2500);
-    return;
-  }
-
-  isRotating = true;
-  rotateProgress = 0;
-
-  // tappedPosIdx ကို 0 သို့ ရောက်အောင် shift လုပ်ရမယ့် ပမာဏ
-  const steps = tappedPosIdx; // ဘယ်နှစ်ဆင့် shift လုပ်ရမလဲ
-
-  rotateFrom = meshes.map(m => m.userData.base.clone());
-  rotateTo = meshes.map((m, i) => {
-    // mesh i ရဲ့ ယခု position index ရှာ
-    const curPos = m.userData.base;
-    let curPosIdx = 0;
-    let md = Infinity;
-    positions.forEach((p, pi) => {
-      const d = curPos.distanceTo(p);
-      if(d < md){ md = d; curPosIdx = pi; }
-    });
-    // steps ဆင့် ရှေ့တက်
-    const newPosIdx = (curPosIdx - steps + N) % N;
-    return positions[newPosIdx].clone();
-  });
-
-  // ဖိတဲ့ပုံ ရှေ့ရောက်ပြီ ဆိုတဲ့ caption ပြ
-  capEl.textContent = photoData[meshes.indexOf(targetMesh)].caption;
+function startHold(mesh){
+  isHolding = true;
+  holdMesh  = mesh;
+  // caption ပြ
+  const idx = meshes.indexOf(mesh);
+  capEl.textContent = '❤ ' + photoData[idx].caption;
   capEl.classList.add('show');
   clearTimeout(capTimer);
-  capTimer = setTimeout(()=> capEl.classList.remove('show'), 2500);
+}
+
+function endHold(){
+  isHolding = false;
+  holdMesh  = null;
+  clearTimeout(holdTimer);
+  holdTimer = null;
+  capEl.classList.remove('show');
 }
 
 // ── pointer down
@@ -454,9 +436,12 @@ function onPointerDown(cx, cy){
   ray.setFromCamera(mpos, camera);
   const hit = ray.intersectObjects(meshes);
 
-  if(hit.length && !isRotating){
+  if(hit.length){
     tappedMesh = hit[0].object;
     controls.enabled = false;
+    // hold timer စမယ်
+    clearTimeout(holdTimer);
+    holdTimer = setTimeout(()=> startHold(tappedMesh), HOLD_MS);
   } else {
     tappedMesh = null;
     controls.enabled = true;
@@ -468,18 +453,21 @@ function onPointerMove(cx, cy){
   const dx = cx - pressStartX, dy = cy - pressStartY;
   if(Math.sqrt(dx*dx+dy*dy) > dragThresh){
     didDrag = true;
+    // drag စလျင် hold cancel
+    if(holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
+    if(isHolding){ endHold(); }
+
     if(tappedMesh){
       // drag on photo → rotate flowerGroup relative to camera orientation
       isDraggingFlower = true;
       const deltaX = cx - prevX;
       const deltaY = cy - prevY;
 
-      // camera ရဲ့ up/right direction နဲ့ align ဖြစ်အောင် quaternion သုံး
       const camRight = new THREE.Vector3();
       const camUp    = new THREE.Vector3();
-      camera.getWorldDirection(new THREE.Vector3()); // ensure matrix updated
-      camRight.setFromMatrixColumn(camera.matrixWorld, 0); // camera right axis
-      camUp.setFromMatrixColumn(camera.matrixWorld, 1);    // camera up axis
+      camera.getWorldDirection(new THREE.Vector3());
+      camRight.setFromMatrixColumn(camera.matrixWorld, 0);
+      camUp.setFromMatrixColumn(camera.matrixWorld, 1);
 
       const qX = new THREE.Quaternion().setFromAxisAngle(camUp,    deltaX * 0.008);
       const qY = new THREE.Quaternion().setFromAxisAngle(camRight, deltaY * 0.008);
@@ -492,9 +480,21 @@ function onPointerMove(cx, cy){
 
 // ── pointer up
 function onPointerUp(cx, cy){
-  if(tappedMesh && !didDrag && !isRotating){
-    startCarouselRotateTo(tappedMesh);
+  clearTimeout(holdTimer);
+  holdTimer = null;
+
+  if(isHolding){
+    endHold();
   }
+  // tap (ဖိမထားဘဲ ထိပြီးချက်ချင်းလွတ်) — carousel rotate မလုပ်တော့၊ caption တိုတိုပြ
+  else if(tappedMesh && !didDrag){
+    const idx = meshes.indexOf(tappedMesh);
+    capEl.textContent = photoData[idx].caption;
+    capEl.classList.add('show');
+    clearTimeout(capTimer);
+    capTimer = setTimeout(()=> capEl.classList.remove('show'), 1800);
+  }
+
   tappedMesh = null;
   isDraggingFlower = false;
   controls.enabled = true;
@@ -524,6 +524,18 @@ function animate(){
   requestAnimationFrame(animate);
   const t = performance.now() * .001;
 
+  // ══ INTRO ZOOM-OUT ══
+  if(introActive){
+    introProgress += 1 / (introDuration * 60);
+    if(introProgress >= 1){ introProgress = 1; introActive = false; }
+    // easeOutCubic
+    const ease = 1 - Math.pow(1 - introProgress, 3);
+    camera.position.lerpVectors(introStartPos, introEndPos, ease);
+    controls.enabled = false;
+  } else {
+    controls.enabled = true;
+  }
+
   // Carousel rotation animation
   if(isRotating){
     rotateProgress = Math.min(rotateProgress + 0.018, 1);
@@ -548,14 +560,21 @@ function animate(){
     }
   }
 
-  // flower cards float + face camera
+  // flower cards float + face camera + hold scale effect
   meshes.forEach(m => {
     const d = m.userData;
     m.position.x = d.base.x;
     m.position.z = d.base.z;
     m.position.y = d.base.y + Math.sin(t * d.speed + d.phase) * d.amp;
     m.lookAt(camera.position);
-    m.scale.setScalar(1.0);
+
+    // hold နေချိန် — ဖိထားတဲ့ပုံဘဲ ကြီးမယ်
+    if(isHolding && holdMesh && m === holdMesh){
+      const pulse = 1.22 + Math.sin(t * 4) * 0.04;
+      m.scale.setScalar(pulse);
+    } else {
+      m.scale.setScalar(1.0);
+    }
   });
 
   // 3D hearts float & rotate
