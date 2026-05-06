@@ -278,7 +278,7 @@ const N = photoData.length;
 // HEXAGON FLOWER POSITIONS
 // ══════════════════════════════════════════
 const CARD_R = 0.36;
-const D      = CARD_R * 2 + 0.005;
+const D      = CARD_R * 2 + 0.18;   // ပုံတွေကြား ပိုကွာအောင်
 const H      = D * Math.sin(Math.PI/3);
 
 const positions = [
@@ -396,27 +396,35 @@ let rotateTo = [];
 let tappedMesh = null;
 let isDraggingFlower = false;
 
-// ── Long press / hold state
-let holdTimer = null;
-let holdMesh  = null;
-let isHolding = false;
-const HOLD_MS = 350; // 350ms ဖိမှ hold ဆိုမယ်
+// ── Enlarge state: activeMesh = ယခုကြီးနေတဲ့ပုံ
+let activeMesh = null;
+let isHolding  = false;
+let holdMesh   = null;
+let holdTimer  = null;
 
-function startHold(mesh){
-  isHolding = true;
-  holdMesh  = mesh;
-  // caption ပြ
+function showEnlarged(mesh){
+  activeMesh = mesh;
+  isHolding  = true;
+  holdMesh   = mesh;
   const idx = meshes.indexOf(mesh);
   capEl.textContent = '❤ ' + photoData[idx].caption;
   capEl.classList.add('show');
   clearTimeout(capTimer);
 }
 
-function endHold(){
-  isHolding = false;
-  holdMesh  = null;
-  clearTimeout(holdTimer);
-  holdTimer = null;
+function hideEnlarged(){
+  activeMesh = null;
+  isHolding  = false;
+  holdMesh   = null;
+  clearTimeout(capTimer);
+  capTimer = setTimeout(()=> capEl.classList.remove('show'), 1800);
+}
+
+function dismissAll(){
+  activeMesh = null;
+  isHolding  = false;
+  holdMesh   = null;
+  clearTimeout(capTimer);
   capEl.classList.remove('show');
 }
 
@@ -438,10 +446,13 @@ function onPointerDown(cx, cy){
   if(hit.length){
     tappedMesh = hit[0].object;
     controls.enabled = false;
-    // hold timer စမယ်
-    clearTimeout(holdTimer);
-    holdTimer = setTimeout(()=> startHold(tappedMesh), HOLD_MS);
+    // ပုံမကြီးသေးရင် ကြီး၊ ကြီးနေပြီဆိုရင် ဒီအတိုင်းထားမယ်
+    if(activeMesh !== tappedMesh){
+      showEnlarged(tappedMesh);
+    }
   } else {
+    // တစ်ခြားနေရာ ထိ → ချက်ချင်းသေး + caption ပျောက်
+    dismissAll();
     tappedMesh = null;
     controls.enabled = true;
   }
@@ -452,9 +463,6 @@ function onPointerMove(cx, cy){
   const dx = cx - pressStartX, dy = cy - pressStartY;
   if(Math.sqrt(dx*dx+dy*dy) > dragThresh){
     didDrag = true;
-    // drag စလျင် hold cancel
-    if(holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
-    if(isHolding){ endHold(); }
 
     if(tappedMesh){
       // drag on photo → rotate flowerGroup relative to camera orientation
@@ -479,21 +487,7 @@ function onPointerMove(cx, cy){
 
 // ── pointer up
 function onPointerUp(cx, cy){
-  clearTimeout(holdTimer);
-  holdTimer = null;
-
-  if(isHolding){
-    endHold();
-  }
-  // tap (ဖိမထားဘဲ ထိပြီးချက်ချင်းလွတ်) — carousel rotate မလုပ်တော့၊ caption တိုတိုပြ
-  else if(tappedMesh && !didDrag){
-    const idx = meshes.indexOf(tappedMesh);
-    capEl.textContent = photoData[idx].caption;
-    capEl.classList.add('show');
-    clearTimeout(capTimer);
-    capTimer = setTimeout(()=> capEl.classList.remove('show'), 1800);
-  }
-
+  // လက်ဆောင်လဲ ကြီးနေမည် — dismissAll သာ သေးစေမည်
   tappedMesh = null;
   isDraggingFlower = false;
   controls.enabled = true;
@@ -559,7 +553,7 @@ function animate(){
     }
   }
 
-  // flower cards float + face camera + hold scale effect
+  // flower cards float + face camera + press scale effect
   meshes.forEach(m => {
     const d = m.userData;
     m.position.x = d.base.x;
@@ -567,13 +561,11 @@ function animate(){
     m.position.y = d.base.y + Math.sin(t * d.speed + d.phase) * d.amp;
     m.lookAt(camera.position);
 
-    // hold နေချိန် — ဖိထားတဲ့ပုံဘဲ ကြီးမယ်
-    if(isHolding && holdMesh && m === holdMesh){
-      const pulse = 1.22 + Math.sin(t * 4) * 0.04;
-      m.scale.setScalar(pulse);
-    } else {
-      m.scale.setScalar(1.0);
-    }
+    // ဖိထားတဲ့ပုံ smooth ကြီး၊ လွတ်ရင် smooth ကျ
+    const targetScale = (activeMesh && m === activeMesh) ? 1.28 : 1.0;
+    m.scale.x += (targetScale - m.scale.x) * 0.12;
+    m.scale.y += (targetScale - m.scale.y) * 0.12;
+    m.scale.z += (targetScale - m.scale.z) * 0.12;
   });
 
   // 3D hearts float & rotate
