@@ -103,13 +103,12 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
 // ══════════════════════════════════════════
 const scene    = new THREE.Scene();
 const camera   = new THREE.PerspectiveCamera(60, innerWidth/innerHeight, 0.1, 1000);
-// ပုံထဲနီးနီးမှာ စ၊ ပြီးရင် zoom out
-camera.position.set(0.5, 0.8, 0.6);
+camera.position.set(0, 0, 5);
 
-let introActive   = true;
-let introProgress = 0;
+let introActive   = false;
+let introProgress = 1;
 const introDuration = 2.5;
-const introStartPos = new THREE.Vector3(0.5, 0.8, 0.6);
+const introStartPos = new THREE.Vector3(0, 0, 5);
 const introEndPos   = new THREE.Vector3(0, 0, 5);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
