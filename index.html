@@ -86,7 +86,7 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
   <div id="date">
     <span class="heart-icon">♡</span>
     <span class="texts">
-      <span class="num">Since Dec 1, 2017</span>
+      <span class="num">Since May 5, 2025</span>
       <span class="sub">Our Special Journey</span>
     </span>
   </div>
@@ -445,13 +445,13 @@ function onPointerDown(cx, cy){
 
   if(hit.length){
     tappedMesh = hit[0].object;
+    // ပုံပေါ် press → OrbitControls ပိတ် (အာကာသမလည်ရ)
     controls.enabled = false;
-    // ပုံမကြီးသေးရင် ကြီး၊ ကြီးနေပြီဆိုရင် ဒီအတိုင်းထားမယ်
     if(activeMesh !== tappedMesh){
       showEnlarged(tappedMesh);
     }
   } else {
-    // တစ်ခြားနေရာ ထိ → ချက်ချင်းသေး + caption ပျောက်
+    // screen ကွာနေရာ → OrbitControls ဖွင့် (အာကာသလည်ရ)
     dismissAll();
     tappedMesh = null;
     controls.enabled = true;
@@ -465,20 +465,18 @@ function onPointerMove(cx, cy){
     didDrag = true;
 
     if(tappedMesh){
-      // drag on photo → rotate flowerGroup relative to camera orientation
+      // ပုံပေါ် drag → flowerGroup တစ်ခုတည်း 360° လည်မည်
       isDraggingFlower = true;
       const deltaX = cx - prevX;
       const deltaY = cy - prevY;
 
       const camRight = new THREE.Vector3();
       const camUp    = new THREE.Vector3();
-      camera.getWorldDirection(new THREE.Vector3());
       camRight.setFromMatrixColumn(camera.matrixWorld, 0);
       camUp.setFromMatrixColumn(camera.matrixWorld, 1);
 
       const qX = new THREE.Quaternion().setFromAxisAngle(camUp,    deltaX * 0.008);
       const qY = new THREE.Quaternion().setFromAxisAngle(camRight, deltaY * 0.008);
-
       flowerGroup.quaternion.premultiply(qX).premultiply(qY);
     }
   }
