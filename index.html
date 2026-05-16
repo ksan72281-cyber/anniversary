@@ -110,15 +110,6 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
 </head>
 <body>
 
-<!-- Loading Screen -->
-<div id="loader">
-  <div id="loader-inner">
-    <div id="loader-hearts">♡</div>
-    <div id="loader-text">Loading...</div>
-    <div id="loader-bar-wrap"><div id="loader-bar"></div></div>
-  </div>
-</div>
-
 <!-- Music Button -->
 <button id="music-btn" title="Music">
   <span id="music-icon">♪</span>
@@ -648,13 +639,14 @@ for(let i=0; i<22; i++){
 }
 
 // ══════════════════════════════════════════
-// MUSIC PLAYER
+// LOADER + MUSIC PLAYER
 // ══════════════════════════════════════════
 const MUSIC_URL = 'https://ksan72281-cyber.github.io/anniversary/2_5404842426458205214.m4a';
 
 const audio = new Audio(MUSIC_URL);
-audio.loop  = true;
-audio.volume = 0.7;
+audio.loop    = true;
+audio.volume  = 0.7;
+audio.preload = 'auto';  // ချက်ချင်း preload စတင်
 
 const musicBtn  = document.getElementById('music-btn');
 const musicIcon = document.getElementById('music-icon');
@@ -668,29 +660,24 @@ function setPlayingUI(){
   musicIcon.textContent = '♪';
   musicIcon.style.color = '#ffccee';
 }
-
 function setPausedUI(){
   musicBtn.classList.remove('playing');
   musicBtn.classList.add('muted');
-  // ✕ အနီရောင် ကြက်ခြေခတ်
   musicIcon.textContent = '✕';
   musicIcon.style.color = '#ff4444';
 }
 
 function startMusic(){
-  // UI ကို ချက်ချင်းပြောင်း
   musicStarted = true;
   isMuted = false;
   setPlayingUI();
   audio.play().catch(()=>{});
 }
-
 function pauseMusic(){
   audio.pause();
   isMuted = true;
   setPausedUI();
 }
-
 function resumeMusic(){
   audio.play().catch(()=>{});
   isMuted = false;
@@ -699,18 +686,14 @@ function resumeMusic(){
 
 musicBtn.addEventListener('click', e => {
   e.stopPropagation();
-  if(!musicStarted){
-    startMusic();
-  } else if(isMuted){
-    resumeMusic();
-  } else {
-    pauseMusic();
-  }
+  if(!musicStarted)     startMusic();
+  else if(isMuted)      resumeMusic();
+  else                  pauseMusic();
 });
 
-// Auto-play on first user interaction anywhere on page
+// ပထမဆုံး touch/click မှာ သီချင်းတန်းဖွင့်
 function autoPlayOnce(){
-  if(!musicStarted){ startMusic(); }
+  if(!musicStarted) startMusic();
   document.removeEventListener('pointerdown', autoPlayOnce);
   document.removeEventListener('touchstart',  autoPlayOnce);
 }
@@ -731,6 +714,16 @@ for(let i=0; i<14; i++){
   `;
   document.body.appendChild(el);
 }
+
+// ── Page ထွက် / Home နှိပ် → music pause၊ ပြန်ဝင် → ဆက်ဖွင့်
+document.addEventListener('visibilitychange', () => {
+  if(!musicStarted) return;
+  if(document.hidden){
+    if(!isMuted) audio.pause();
+  } else {
+    if(!isMuted) audio.play().catch(()=>{});
+  }
+});
 </script>
 </body>
 </html>
