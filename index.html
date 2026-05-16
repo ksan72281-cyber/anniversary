@@ -69,6 +69,43 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
   90% {opacity:.5}
   100%{opacity:0;transform:translate(30vw,90vh)}
 }
+
+/* ══ MUSIC BUTTON ══ */
+#music-btn{
+  position:fixed;top:18px;right:18px;z-index:999;
+  width:44px;height:44px;border-radius:50%;
+  background:rgba(10,3,22,.85);
+  border:1.5px solid rgba(255,150,220,.5);
+  backdrop-filter:blur(14px);
+  box-shadow:0 0 16px rgba(255,80,160,.3);
+  cursor:pointer;pointer-events:all;
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .15s,box-shadow .2s;
+  appearance:none;-webkit-appearance:none;
+  outline:none;color:#ffccee;
+  font-family:'Nunito',sans-serif;line-height:1;padding:0;
+}
+#music-btn:active{transform:scale(.9)}
+#music-btn.playing{
+  box-shadow:0 0 22px rgba(255,80,160,.7),0 0 6px rgba(255,80,160,.5);
+  border-color:rgba(255,150,220,.9);
+}
+#music-btn.muted{
+  border-color:rgba(255,60,60,.7);
+  box-shadow:0 0 14px rgba(255,40,40,.3);
+}
+#music-icon{
+  font-size:19px;
+  transition:opacity .2s;
+}
+/* spin animation for note */
+@keyframes spin{
+  0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}
+}
+#music-btn.playing #music-icon{
+  display:inline-block;
+  animation:spin 3s linear infinite;
+}
 </style>
 </head>
 <body>
@@ -81,6 +118,11 @@ canvas{position:fixed;inset:0;z-index:0;display:block}
     <div id="loader-bar-wrap"><div id="loader-bar"></div></div>
   </div>
 </div>
+
+<!-- Music Button -->
+<button id="music-btn" title="Music">
+  <span id="music-icon">♪</span>
+</button>
 
 <div id="ui">
   <div id="date">
@@ -606,8 +648,75 @@ for(let i=0; i<22; i++){
 }
 
 // ══════════════════════════════════════════
-// ကြယ်ကြွေ METEORS
+// MUSIC PLAYER
 // ══════════════════════════════════════════
+const MUSIC_URL = 'https://ksan72281-cyber.github.io/anniversary/2_5404842426458205214.m4a';
+
+const audio = new Audio(MUSIC_URL);
+audio.loop  = true;
+audio.volume = 0.7;
+
+const musicBtn  = document.getElementById('music-btn');
+const musicIcon = document.getElementById('music-icon');
+
+let musicStarted = false;
+let isMuted      = false;
+
+function setPlayingUI(){
+  musicBtn.classList.add('playing');
+  musicBtn.classList.remove('muted');
+  musicIcon.textContent = '♪';
+  musicIcon.style.color = '#ffccee';
+}
+
+function setPausedUI(){
+  musicBtn.classList.remove('playing');
+  musicBtn.classList.add('muted');
+  // ✕ အနီရောင် ကြက်ခြေခတ်
+  musicIcon.textContent = '✕';
+  musicIcon.style.color = '#ff4444';
+}
+
+function startMusic(){
+  // UI ကို ချက်ချင်းပြောင်း
+  musicStarted = true;
+  isMuted = false;
+  setPlayingUI();
+  audio.play().catch(()=>{});
+}
+
+function pauseMusic(){
+  audio.pause();
+  isMuted = true;
+  setPausedUI();
+}
+
+function resumeMusic(){
+  audio.play().catch(()=>{});
+  isMuted = false;
+  setPlayingUI();
+}
+
+musicBtn.addEventListener('click', e => {
+  e.stopPropagation();
+  if(!musicStarted){
+    startMusic();
+  } else if(isMuted){
+    resumeMusic();
+  } else {
+    pauseMusic();
+  }
+});
+
+// Auto-play on first user interaction anywhere on page
+function autoPlayOnce(){
+  if(!musicStarted){ startMusic(); }
+  document.removeEventListener('pointerdown', autoPlayOnce);
+  document.removeEventListener('touchstart',  autoPlayOnce);
+}
+document.addEventListener('pointerdown', autoPlayOnce);
+document.addEventListener('touchstart',  autoPlayOnce, {passive:true});
+
 for(let i=0; i<14; i++){
   const el = document.createElement('div');
   el.className = 'meteor';
